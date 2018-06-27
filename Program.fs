@@ -28,7 +28,7 @@ let appendDictionary (main: Dictionary<int, (byte*byte)>) (adding: Dictionary<in
 
 [<EntryPoint>]
 let main argv =
-    let dict = Dictionary<string, int>()
+    let dict = Dictionary<string, byte>()
     let metrics = Dictionary<string, UserData>()
     let linesWithAnswers  = File.ReadLines("../../../data/mlboot_train_answers.tsv")
     for line in linesWithAnswers do    
@@ -36,7 +36,7 @@ let main argv =
         if 
             values.[0] <> "cuid"
         then
-            dict.[values.[0]] <- values.[1] |> int
+            dict.[values.[0]] <- values.[1] |> byte
 
     let linesWithData  = File.ReadLines("../../../data/mlboot_data.tsv")
     for line in linesWithData do    
@@ -50,7 +50,10 @@ let main argv =
             let metrics4 = deserializeMetric values.[4]
             if metrics.ContainsKey(id)
             then
-                Console.Write("")
+                let metricsDict = metrics.[id].Metrics
+                metrics2 |> appendDictionary metricsDict
+                metrics3 |> appendDictionary metricsDict
+                metrics4 |> appendDictionary metricsDict
             else 
 
                 let metricsDist = Dictionary<int, (byte*byte)>()
@@ -60,7 +63,7 @@ let main argv =
                 metrics.[id] <- 
                                 {
                                     Metrics = metricsDist
-                                    Vote = 1uy
+                                    Vote = dict.[id]
                                 }
 
 
