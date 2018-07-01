@@ -3,3 +3,5 @@ bin/
 obj/
 artifacts/
 data/
+.vs/
+result/
