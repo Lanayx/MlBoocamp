@@ -100,9 +100,9 @@ let fillDataSet (dict: Dictionary<string, int>) headersPath dataPath srPath f wr
     then
         sr.WriteLine(headersString)
 
-    let userValues = Dictionary<string, int>(StringComparer.InvariantCultureIgnoreCase)
+    let userValues = Dictionary<string, single>(StringComparer.InvariantCultureIgnoreCase)
     let userValuesCounter = Dictionary<string, (int*int)>()
-    headers |> Seq.iter (fun elem -> userValues.Add(elem, 0))
+    headers |> Seq.iter (fun elem -> userValues.Add(elem, 0.0f))
 
     let mutable currentId = ""
     let mutable touched = false
@@ -118,19 +118,19 @@ let fillDataSet (dict: Dictionary<string, int>) headersPath dataPath srPath f wr
                     let (sum, count)= kv.Value
                     if userValues.ContainsKey(kv.Key)
                     then
-                        userValues.[kv.Key] <- sum / count
+                        userValues.[kv.Key] <- (sum |> single) / (count |> single)
                         touched <- true
 
                 if touched
                 then
-                    f id userValues sr
+                    f currentId userValues sr
                     counter <- counter + 1
                     if counter % 100 = 0
                     then printfn "%A done" counter
                     touched <- false
                     userValues.Clear()
                     userValuesCounter.Clear()
-                    headers |> Seq.iter (fun elem -> userValues.Add(elem, 0))
+                    headers |> Seq.iter (fun elem -> userValues.Add(elem, 0.0f))
 
             currentId <- id
             let storeValues metric prefix =
@@ -146,8 +146,8 @@ let fillDataSet (dict: Dictionary<string, int>) headersPath dataPath srPath f wr
             else
                 userValuesCounter.["days"] <- (days |> int, 1)
 
-            userValues.["cat" + category.ToString()] <- 1
-            userValues.["label"] <- (int) dict.[id]
+            userValues.["cat" + category.ToString()] <- 1.0f
+            userValues.["label"] <- dict.[id] |> single
 
 let extractTestUsers() =
     let dict = Dictionary<string, int>()
@@ -198,16 +198,16 @@ type Output =
         new() = { Score = 0.0f; }
 
 
-let writeDataSetRow id (userValues: Dictionary<string, int>) (sr: StreamWriter) =
-    let str = String.Join(',', userValues.Values)
-    sr.WriteLine(str)
+let writeDataSetRow id (userValues: Dictionary<string, single>) (sr: StreamWriter) =
+    let str = String.Join(',', userValues.Values |> Seq.map (fun value -> value.ToString(CultureInfo.InvariantCulture)))
+    sr.WriteLine(id + "," + str)
 
-let writePrediction (model: PredictionModel<Input, Output>) id (userValues: Dictionary<string, int>) (sr: StreamWriter) =
+let writePrediction (model: PredictionModel<Input, Output>) id (userValues: Dictionary<string, single>) (sr: StreamWriter) =
     let label = userValues.["label"] |> single
     userValues.Remove("label") |> ignore
     let input = new Input()
     input.Label <- label
-    input.Features <- userValues.Values |> Seq.map (fun x -> (single) x) |> Seq.toArray
+    input.Features <- userValues.Values |> Seq.toArray
     let output = model.Predict(input)
     let score = if output.Score > 0.0f then output.Score else 0.0f
     sr.WriteLine(id + "," + score.ToString(CultureInfo.InvariantCulture))
@@ -241,13 +241,13 @@ let main argv =
     //let headers = loadDataNew()
     //File.WriteAllText("../../../result/headers10.csv", String.Join(",",headers))
 
-    //fillDataSet
-    //    (getTrainUsers())
-    //    "../../../result/headers10.csv"
-    //    "../../../data/mlboot_data.tsv"
-    //    "../../../result/dataset.csv"
-    //    writeDataSetRow
-    //    true
+    fillDataSet
+        (getTrainUsers())
+        "../../../result/headers10.csv"
+        "../../../data/mlboot_data.tsv"
+        "../../../result/dataset.csv"
+        writeDataSetRow
+        true
 
     // extractTestUsers()
 
@@ -269,7 +269,7 @@ let main argv =
 
     // "000014fe918d1f97a632a796f4948be8" is missing
 
-    extractResults()
+    //extractResults()
 
     printfn "Hello World from F#!"
     0 // return an integer exit code
