@@ -37,14 +37,18 @@ let addMetricToSet (dict: Dictionary<string, int>) (goodSet: HashSet<string>) pr
         then
             count <- count + 1
             dict.[metricName] <- count
-            if count = 10000
+            if count = 2000
             then goodSet.Add(metricName) |> ignore
+            if count > 20000
+            then
+                goodSet.Remove(metricName) |> ignore
+                dict.[metricName] <- -1000000
         else
             dict.[metricName] <- 1)
 
 let loadDataNew() =
 
-    let dict = Dictionary<string, byte>()
+    let dict = Dictionary<string, int>()
     let metricDictionary = Dictionary<string, int>(StringComparer.InvariantCultureIgnoreCase)
     let goodMetricSet = HashSet<string>(StringComparer.InvariantCultureIgnoreCase)
     goodMetricSet.Add("label") |> ignore
@@ -52,13 +56,10 @@ let loadDataNew() =
     let addMetric = addMetricToSet metricDictionary goodMetricSet
     let mutable counter = 0
 
-    let linesWithAnswers  = File.ReadLines("../../../data/mlboot_train_answers.tsv")
+    let linesWithAnswers  = File.ReadLines("../../../data/mlboot_train_answers_1.tsv")
     for line in linesWithAnswers do
         let values = line.Split('\t')
-        if
-            values.[0] <> "cuid"
-        then
-            dict.[values.[0]] <- values.[1] |> byte
+        dict.[values.[0]] <- values.[1] |> int
 
     let linesWithData  = File.ReadLines("../../../data/mlboot_data.tsv")
     for line in linesWithData do
@@ -74,15 +75,12 @@ let loadDataNew() =
     goodMetricSet.Add("days") |> ignore
     goodMetricSet
 
-let getTrainUsers() =
+let getUsers path =
     let dict = Dictionary<string, int>()
-    let linesWithAnswers  = File.ReadLines("../../../data/mlboot_train_answers.tsv")
+    let linesWithAnswers  = File.ReadLines(path)
     for line in linesWithAnswers do
         let values = line.Split('\t')
-        if
-            values.[0] <> "cuid"
-        then
-            dict.[values.[0]] <- values.[1] |> int
+        dict.[values.[0]] <- values.[1] |> int
     dict
 
 
@@ -105,7 +103,6 @@ let fillDataSet (dict: Dictionary<string, int>) headersPath dataPath srPath f wr
     headers |> Seq.iter (fun elem -> userValues.Add(elem, 0.0f))
 
     let mutable currentId = ""
-    let mutable touched = false
 
     for line in linesWithData do
         let res = line.Split('\t')
@@ -119,18 +116,14 @@ let fillDataSet (dict: Dictionary<string, int>) headersPath dataPath srPath f wr
                     if userValues.ContainsKey(kv.Key)
                     then
                         userValues.[kv.Key] <- (sum |> single) / (count |> single)
-                        touched <- true
 
-                if touched
-                then
-                    f currentId userValues sr
-                    counter <- counter + 1
-                    if counter % 100 = 0
-                    then printfn "%A done" counter
-                    touched <- false
-                    userValues.Clear()
-                    userValuesCounter.Clear()
-                    headers |> Seq.iter (fun elem -> userValues.Add(elem, 0.0f))
+                f currentId userValues sr
+                counter <- counter + 1
+                if counter % 100 = 0
+                then printfn "%A done" counter
+                userValues.Clear()
+                userValuesCounter.Clear()
+                headers |> Seq.iter (fun elem -> userValues.Add(elem, 0.0f))
 
             currentId <- id
             let storeValues metric prefix =
@@ -145,11 +138,10 @@ let fillDataSet (dict: Dictionary<string, int>) headersPath dataPath srPath f wr
                 userValuesCounter.["days"] <- (sum + (days |> int), count + 1)
             else
                 userValuesCounter.["days"] <- (days |> int, 1)
-
             userValues.["cat" + category.ToString()] <- 1.0f
             userValues.["label"] <- dict.[id] |> single
 
-let extractTestUsers() =
+let extractTestUsers resultPath =
     let dict = Dictionary<string, int>()
     let linesWithAnswers  = File.ReadLines("../../../data/mlboot_test.tsv")
     for line in linesWithAnswers do
@@ -160,7 +152,7 @@ let extractTestUsers() =
             dict.[values.[0]] <- 1
 
     let linesWithData  = File.ReadLines("../../../data/mlboot_data.tsv")
-    use fs = File.OpenWrite("../../../result/xusers_data.csv")
+    use fs = File.OpenWrite(resultPath)
     use sr = new StreamWriter(fs)
     for line in linesWithData do
         let res = line.Split('\t')
@@ -200,7 +192,7 @@ type Output =
 
 let writeDataSetRow id (userValues: Dictionary<string, single>) (sr: StreamWriter) =
     let str = String.Join(',', userValues.Values |> Seq.map (fun value -> value.ToString(CultureInfo.InvariantCulture)))
-    sr.WriteLine(id + "," + str)
+    sr.WriteLine(str)
 
 let writePrediction (model: PredictionModel<Input, Output>) id (userValues: Dictionary<string, single>) (sr: StreamWriter) =
     let label = userValues.["label"] |> single
@@ -239,18 +231,25 @@ let extractResults() =
 let main argv =
 
     //let headers = loadDataNew()
-    //File.WriteAllText("../../../result/headers10.csv", String.Join(",",headers))
+    //File.WriteAllText("../../../result/headers(2-20).csv", String.Join(",",headers))
 
     fillDataSet
-        (getTrainUsers())
-        "../../../result/headers10.csv"
+        (getUsers "../../../data/mlboot_train_answers_1.tsv")
+        "../../../result/headers(2-20).csv"
         "../../../data/mlboot_data.tsv"
-        "../../../result/dataset.csv"
+        "../../../result/dataset_train.csv"
         writeDataSetRow
         true
 
-    // extractTestUsers()
+    fillDataSet
+        (getUsers "../../../data/mlboot_train_answers_2.tsv")
+        "../../../result/headers(2-20).csv"
+        "../../../data/mlboot_data.tsv"
+        "../../../result/dataset_evaluate.csv"
+        writeDataSetRow
+        true
 
+    // extractTestUsers "../../../data/test_users_data.tsv"
 
 
     //let pipeline = LearningPipeline();
@@ -258,11 +257,13 @@ let main argv =
     //pipeline.Add(new StochasticDualCoordinateAscentRegressor())
     //let model = pipeline.Train<Input, Output>()
 
+    //let classifier = new FieldAwareFactorizationMachineBinaryClassifier()
+    //classifier.GetInputData <-
 
     //fillDataSet
     //    (getInputs())
     //    "../../../result/headers10.csv"
-    //    "../../../result/xusers_data.tsv"
+    //    "../../../data/test_users_data.tsv"
     //    "../../../result/tempResults.csv"
     //    (writePrediction model)
     //    false
