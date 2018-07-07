@@ -9,6 +9,7 @@ open Microsoft.ML.Data
 open Microsoft.ML.Trainers
 open Microsoft.ML.Runtime.Api;
 open System.Globalization
+open Microsoft.ML.Models
 
 let getMetric metric =
     let obj = JsonConvert.DeserializeObject<Dictionary<string, int>>(metric)
@@ -176,7 +177,7 @@ type Input =
         [<Column("0", "Label")>]
         val mutable Label: single
         [<Column("1", "Features")>]
-        [<VectorType(14699)>]
+        [<VectorType(20240)>]
         val mutable Features: single[]
 
         new() = { Label = 0.0f; Features = [||] }
@@ -227,35 +228,56 @@ let extractResults() =
             printfn "%A is missing" id
             sr.WriteLine("0")
 
+let evaluateResults (model: PredictionModel<Input, Output>) (evaluatePath: string) =
+    let testData = TextLoader(evaluatePath).CreateFrom(true, ',',false, true, false)
+    //let regressionEvaluator = new RegressionEvaluator()
+    //let metrics = regressionEvaluator.Evaluate(model, testData)
+    //Console.WriteLine()
+    //Console.WriteLine("PredictionModel quality metrics evaluation")
+    //Console.WriteLine("------------------------------------------")
+    //Console.WriteLine("Rms = {0}", metrics.Rms)
+    //Console.WriteLine("RSquared = {0}", metrics.RSquared)
+    let regressionEvaluator = new BinaryClassificationEvaluator ()
+    let metrics = regressionEvaluator.Evaluate(model, testData)
+    Console.WriteLine()
+    Console.WriteLine("PredictionModel quality metrics evaluation")
+    Console.WriteLine("------------------------------------------")
+    Console.WriteLine("Accuracy: {0}", metrics.Accuracy)
+    Console.WriteLine("Auc: {0}", metrics.Auc)
+    Console.WriteLine("F1Score: {0}", metrics.F1Score)
+
 [<EntryPoint>]
 let main argv =
 
     //let headers = loadDataNew()
     //File.WriteAllText("../../../result/headers(2-20).csv", String.Join(",",headers))
 
-    fillDataSet
-        (getUsers "../../../data/mlboot_train_answers_1.tsv")
-        "../../../result/headers(2-20).csv"
-        "../../../data/mlboot_data.tsv"
-        "../../../result/dataset_train.csv"
-        writeDataSetRow
-        true
+    //fillDataSet
+    //    (getUsers "../../../data/mlboot_train_answers_1.tsv")
+    //    "../../../result/headers(2-20).csv"
+    //    "../../../data/mlboot_data.tsv"
+    //    "../../../result/dataset_train.csv"
+    //    writeDataSetRow
+    //    true
 
-    fillDataSet
-        (getUsers "../../../data/mlboot_train_answers_2.tsv")
-        "../../../result/headers(2-20).csv"
-        "../../../data/mlboot_data.tsv"
-        "../../../result/dataset_evaluate.csv"
-        writeDataSetRow
-        true
+    //fillDataSet
+    //    (getUsers "../../../data/mlboot_train_answers_2.tsv")
+    //    "../../../result/headers(2-20).csv"
+    //    "../../../data/mlboot_data.tsv"
+    //    "../../../result/dataset_evaluate.csv"
+    //    writeDataSetRow
+    //    true
 
     // extractTestUsers "../../../data/test_users_data.tsv"
 
 
-    //let pipeline = LearningPipeline();
-    //pipeline.Add(TextLoader("../../../result/dataset30K.csv").CreateFrom(true, ',',false, true, false))
-    //pipeline.Add(new StochasticDualCoordinateAscentRegressor())
-    //let model = pipeline.Train<Input, Output>()
+    let pipeline = LearningPipeline();
+    pipeline.Add(TextLoader("../../../result/dataset_train.csv").CreateFrom(true, ',',false, true, false))
+    pipeline.Add(new FieldAwareFactorizationMachineBinaryClassifier ())
+    let model = pipeline.Train<Input, Output>()
+    evaluateResults model "../../../result/dataset_evaluate.csv"
+
+    model.WriteAsync("../../../result/model.zip").Wait()
 
     //let classifier = new FieldAwareFactorizationMachineBinaryClassifier()
     //classifier.GetInputData <-
