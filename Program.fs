@@ -185,13 +185,13 @@ type Input =
 
 type Output =
 
-        [<ColumnName("PredictedLabel")>]
-        val mutable Label: bool
+        //[<ColumnName("PredictedLabel")>]
+        //val mutable Label: bool
 
         [<ColumnName("Score")>]
-        val mutable Score: single
+        val mutable PredictedLabels: single[]
 
-        new() = { Label = false ; Score = 0.0f; }
+        new() = { PredictedLabels = [||]; }
 
 
 let writeDataSetRow id (userValues: Dictionary<string, single>) (sr: StreamWriter) =
@@ -205,11 +205,12 @@ let writePrediction (model: PredictionModel<Input, Output>) id (userValues: Dict
     input.Label <- label
     input.Features <- userValues.Values |> Seq.toArray
     let output = model.Predict(input)
-    sr.WriteLine(id + "," + output.Score.ToString(CultureInfo.InvariantCulture) + "," + output.Label.ToString())
+    sr.WriteLine(id + "," + output.PredictedLabels.[0].ToString(CultureInfo.InvariantCulture)
+        + "," + output.PredictedLabels.[1].ToString(CultureInfo.InvariantCulture))
 
 let extractResults() =
     let list = ResizeArray<string>()
-    let dict = Dictionary<string, int>()
+    let dict = Dictionary<string, string>()
     let testUsers  = File.ReadLines("../../../data/mlboot_test1.tsv")
     for line in testUsers do
         list.Add(line)
@@ -217,9 +218,8 @@ let extractResults() =
     let answers  = File.ReadLines("../../../result/tempResults.csv")
     for line in answers do
         let res = line.Split(',')
-        let [| id; score; value |] = res
-        let label = if (bool.Parse value) then 1 else 0
-        dict.Add(id,  label)
+        let [| id; prob0; prob1 |] = res
+        dict.Add(id,  prob1)
 
     File.WriteAllText("../../../result/final_res.csv", String.Empty);
     use fs = File.OpenWrite("../../../result/final_res.csv")
@@ -240,14 +240,15 @@ let evaluateResults (model: PredictionModel<Input, Output>) (evaluatePath: strin
     //Console.WriteLine("------------------------------------------")
     //Console.WriteLine("Rms = {0}", metrics.Rms)
     //Console.WriteLine("RSquared = {0}", metrics.RSquared)
-    let regressionEvaluator = new BinaryClassificationEvaluator ()
+    let regressionEvaluator = new ClassificationEvaluator ()
     let metrics = regressionEvaluator.Evaluate(model, testData)
     Console.WriteLine()
     Console.WriteLine("PredictionModel quality metrics evaluation")
     Console.WriteLine("------------------------------------------")
-    Console.WriteLine("Accuracy: {0}", metrics.Accuracy)
-    Console.WriteLine("Auc: {0}", metrics.Auc)
-    Console.WriteLine("F1Score: {0}", metrics.F1Score)
+    Console.WriteLine("AccuracyMacro: {0}", metrics.AccuracyMacro)
+    Console.WriteLine("AccuracyMicro: {0}", metrics.AccuracyMicro)
+    Console.WriteLine("LogLoss: {0}", metrics.LogLoss)
+    Console.WriteLine("LogLossReduction: {0}", metrics.LogLossReduction)
 
 [<EntryPoint>]
 let main argv =
@@ -276,13 +277,13 @@ let main argv =
 
     //let pipeline = LearningPipeline();
     //pipeline.Add(TextLoader("../../../result/dataset_train.csv").CreateFrom(true, ',',false, true, false))
-    //pipeline.Add(new FieldAwareFactorizationMachineBinaryClassifier ())
+    //pipeline.Add(new StochasticDualCoordinateAscentClassifier ())
     //let model = pipeline.Train<Input, Output>()
     //evaluateResults model "../../../result/dataset_evaluate.csv"
 
     //model.WriteAsync("../../../result/model.zip").Wait()
 
-    //let model = PredictionModel.ReadAsync<Input, Output>("../../../result/model.zip").Result
+    //let model = PredictionModel.ReadAsync<Input, Output>("../../../result/model_StochasticDual.zip").Result
 
     //fillDataSet
     //    (getInputs())
@@ -292,7 +293,7 @@ let main argv =
     //    (writePrediction model)
     //    false
 
-    // "ffffc1b3d1732f1a923f2ef07430358e" is missing
+    //"ffffc1b3d1732f1a923f2ef07430358e" is missing
 
     extractResults()
 
