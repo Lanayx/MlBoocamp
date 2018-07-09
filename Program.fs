@@ -188,10 +188,13 @@ type Output =
         [<ColumnName("PredictedLabel")>]
         val mutable Label: bool
 
+        [<ColumnName("Probability")>]
+        val mutable Probability: single
+
         [<ColumnName("Score")>]
         val mutable Score: single
 
-        new() = { Label = false ; Score = 0.0f; }
+        new() = { Label = false ; Score = 0.0f; Probability = 0.0f;}
 
 
 let writeDataSetRow id (userValues: Dictionary<string, single>) (sr: StreamWriter) =
@@ -205,11 +208,11 @@ let writePrediction (model: PredictionModel<Input, Output>) id (userValues: Dict
     input.Label <- label
     input.Features <- userValues.Values |> Seq.toArray
     let output = model.Predict(input)
-    sr.WriteLine(id + "," + output.Score.ToString(CultureInfo.InvariantCulture) + "," + output.Label.ToString())
+    sr.WriteLine(id + "," + output.Score.ToString(CultureInfo.InvariantCulture) + "," + output.Label.ToString() + "," + output.Probability.ToString())
 
 let extractResults() =
     let list = ResizeArray<string>()
-    let dict = Dictionary<string, int>()
+    let dict = Dictionary<string, string>()
     let testUsers  = File.ReadLines("../../../data/mlboot_test1.tsv")
     for line in testUsers do
         list.Add(line)
@@ -217,16 +220,16 @@ let extractResults() =
     let answers  = File.ReadLines("../../../result/tempResults.csv")
     for line in answers do
         let res = line.Split(',')
-        let [| id; score; value |] = res
+        let [| id; score; value; probability |] = res
         let label = if (bool.Parse value) then 1 else 0
-        dict.Add(id,  label)
+        dict.Add(id, probability)
 
     File.WriteAllText("../../../result/final_res.csv", String.Empty);
     use fs = File.OpenWrite("../../../result/final_res.csv")
     use sr = new StreamWriter(fs)
     for id in list do
         if (dict.ContainsKey(id))
-        then sr.WriteLine(dict.[id].ToString(CultureInfo.InvariantCulture))
+        then sr.WriteLine(dict.[id])
         else
             printfn "%A is missing" id
             sr.WriteLine("0")
@@ -282,15 +285,15 @@ let main argv =
 
     //model.WriteAsync("../../../result/model.zip").Wait()
 
-    //let model = PredictionModel.ReadAsync<Input, Output>("../../../result/model.zip").Result
+    let model = PredictionModel.ReadAsync<Input, Output>("../../../result/model.zip").Result
 
-    //fillDataSet
-    //    (getInputs())
-    //    "../../../result/headers(2-20).csv"
-    //    "../../../data/test_users_data.tsv"
-    //    "../../../result/tempResults.csv"
-    //    (writePrediction model)
-    //    false
+    fillDataSet
+        (getInputs())
+        "../../../result/headers(2-20).csv"
+        "../../../data/test_users_data.tsv"
+        "../../../result/tempResults.csv"
+        (writePrediction model)
+        false
 
     // "ffffc1b3d1732f1a923f2ef07430358e" is missing
 
