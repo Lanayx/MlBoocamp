@@ -185,10 +185,13 @@ type Input =
 
 type Output =
 
+        [<ColumnName("PredictedLabel")>]
+        val mutable Label: bool
+
         [<ColumnName("Score")>]
         val mutable Score: single
 
-        new() = { Score = 0.0f; }
+        new() = { Label = false ; Score = 0.0f; }
 
 
 let writeDataSetRow id (userValues: Dictionary<string, single>) (sr: StreamWriter) =
@@ -202,12 +205,11 @@ let writePrediction (model: PredictionModel<Input, Output>) id (userValues: Dict
     input.Label <- label
     input.Features <- userValues.Values |> Seq.toArray
     let output = model.Predict(input)
-    let score = if output.Score > 0.0f then output.Score else 0.0f
-    sr.WriteLine(id + "," + score.ToString(CultureInfo.InvariantCulture))
+    sr.WriteLine(id + "," + output.Score.ToString(CultureInfo.InvariantCulture) + "," + output.Label.ToString())
 
 let extractResults() =
     let list = ResizeArray<string>()
-    let dict = Dictionary<string, single>()
+    let dict = Dictionary<string, int>()
     let testUsers  = File.ReadLines("../../../data/mlboot_test1.tsv")
     for line in testUsers do
         list.Add(line)
@@ -215,8 +217,9 @@ let extractResults() =
     let answers  = File.ReadLines("../../../result/tempResults.csv")
     for line in answers do
         let res = line.Split(',')
-        let [| id; value |] = res
-        dict.Add(id, value |> single )
+        let [| id; score; value |] = res
+        let label = if (bool.Parse value) then 1 else 0
+        dict.Add(id,  label)
 
     File.WriteAllText("../../../result/final_res.csv", String.Empty);
     use fs = File.OpenWrite("../../../result/final_res.csv")
@@ -271,28 +274,27 @@ let main argv =
     // extractTestUsers "../../../data/test_users_data.tsv"
 
 
-    let pipeline = LearningPipeline();
-    pipeline.Add(TextLoader("../../../result/dataset_train.csv").CreateFrom(true, ',',false, true, false))
-    pipeline.Add(new FieldAwareFactorizationMachineBinaryClassifier ())
-    let model = pipeline.Train<Input, Output>()
-    evaluateResults model "../../../result/dataset_evaluate.csv"
+    //let pipeline = LearningPipeline();
+    //pipeline.Add(TextLoader("../../../result/dataset_train.csv").CreateFrom(true, ',',false, true, false))
+    //pipeline.Add(new FieldAwareFactorizationMachineBinaryClassifier ())
+    //let model = pipeline.Train<Input, Output>()
+    //evaluateResults model "../../../result/dataset_evaluate.csv"
 
-    model.WriteAsync("../../../result/model.zip").Wait()
+    //model.WriteAsync("../../../result/model.zip").Wait()
 
-    //let classifier = new FieldAwareFactorizationMachineBinaryClassifier()
-    //classifier.GetInputData <-
+    //let model = PredictionModel.ReadAsync<Input, Output>("../../../result/model.zip").Result
 
     //fillDataSet
     //    (getInputs())
-    //    "../../../result/headers10.csv"
+    //    "../../../result/headers(2-20).csv"
     //    "../../../data/test_users_data.tsv"
     //    "../../../result/tempResults.csv"
     //    (writePrediction model)
     //    false
 
-    // "000014fe918d1f97a632a796f4948be8" is missing
+    // "ffffc1b3d1732f1a923f2ef07430358e" is missing
 
-    //extractResults()
+    extractResults()
 
     printfn "Hello World from F#!"
     0 // return an integer exit code
