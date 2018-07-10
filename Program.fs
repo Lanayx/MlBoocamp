@@ -141,6 +141,7 @@ let fillDataSet (dict: Dictionary<string, int>) headersPath dataPath srPath f wr
                 userValuesCounter.["days"] <- (days |> int, 1)
             userValues.["cat" + category.ToString()] <- 1.0f
             userValues.["label"] <- dict.[id] |> single
+    f currentId userValues sr
 
 let extractTestUsers resultPath =
     let dict = Dictionary<string, int>()
