@@ -10,20 +10,20 @@ open Microsoft.ML.Trainers
 open Microsoft.ML.Runtime.Api;
 open System.Globalization
 open Microsoft.ML.Models
+open Microsoft.ML.Transforms
 
 let getMetric metric =
     let obj = JsonConvert.DeserializeObject<Dictionary<string, int>>(metric)
     obj
 
-let appendDictionary (main: Dictionary<string, (int*int)>) (adding: Dictionary<string, int>) prefix =
+let appendDictionary (main: Dictionary<string, int list>) (adding: Dictionary<string, int>) prefix =
     for elem in adding do
         let key = prefix + elem.Key
         if (main.ContainsKey key)
         then
-            let (sum, num) = main.[key]
-            main.[key] <- (sum + elem.Value, num + 1)
+            main.[key] <- elem.Value :: main.[key]
         else
-            main.[key] <- (elem.Value, 1)
+            main.[key] <- [ elem.Value ]
 
 let extractMetrics (metric: Dictionary<string, int>) =
     metric.Keys
@@ -57,7 +57,7 @@ let loadDataNew() =
     let addMetric = addMetricToSet metricDictionary goodMetricSet
     let mutable counter = 0
 
-    let linesWithAnswers  = File.ReadLines("../../../data/mlboot_train_answers_1.tsv")
+    let linesWithAnswers  = File.ReadLines("../../../data/mlboot_train_answers_0.tsv")
     for line in linesWithAnswers do
         let values = line.Split('\t')
         dict.[values.[0]] <- values.[1] |> int
@@ -84,6 +84,15 @@ let getUsers path =
         dict.[values.[0]] <- values.[1] |> int
     dict
 
+let median intList = 
+    let sorted = intList |> List.toArray |> Array.sort
+    let m1,m2 = 
+        let len = sorted.Length-1 |> float
+        len/2. |> floor |> int, len/2. |> ceil |> int 
+    (sorted.[m1] + sorted.[m2] |> single) /2.0f
+
+let mean intList = 
+    intList |> List.map single |> List.average
 
 let fillDataSet (dict: Dictionary<string, int>) headersPath dataPath srPath f writeHeaders =
     let mutable counter = 0
@@ -100,7 +109,7 @@ let fillDataSet (dict: Dictionary<string, int>) headersPath dataPath srPath f wr
         sr.WriteLine(headersString)
 
     let userValues = Dictionary<string, single>(StringComparer.InvariantCultureIgnoreCase)
-    let userValuesCounter = Dictionary<string, (int*int)>()
+    let userValuesCounter = Dictionary<string, int list>()
     headers |> Seq.iter (fun elem -> userValues.Add(elem, 0.0f))
 
     let mutable currentId = ""
@@ -113,10 +122,10 @@ let fillDataSet (dict: Dictionary<string, int>) headersPath dataPath srPath f wr
             if currentId <> id && currentId <> ""
             then
                 for kv in userValuesCounter do
-                    let (sum, count)= kv.Value
+                    let l = kv.Value
                     if userValues.ContainsKey(kv.Key)
                     then
-                        userValues.[kv.Key] <- (sum |> single) / (count |> single)
+                        userValues.[kv.Key] <- mean l
 
                 f currentId userValues sr
                 counter <- counter + 1
@@ -135,12 +144,12 @@ let fillDataSet (dict: Dictionary<string, int>) headersPath dataPath srPath f wr
             storeValues metric3 "z"
             if userValuesCounter.ContainsKey("days")
             then
-                let (sum, count) = userValuesCounter.["days"]
-                userValuesCounter.["days"] <- (sum + (days |> int), count + 1)
+                userValuesCounter.["days"] <- (days |> int) :: userValuesCounter.["days"]
             else
-                userValuesCounter.["days"] <- (days |> int, 1)
+                userValuesCounter.["days"] <- [ days |> int ]
             userValues.["cat" + category.ToString()] <- 1.0f
             userValues.["label"] <- dict.[id] |> single
+    f currentId userValues sr
 
 let extractTestUsers resultPath =
     let dict = Dictionary<string, int>()
@@ -234,6 +243,19 @@ let extractResults() =
             printfn "%A is missing" id
             sr.WriteLine("0")
 
+let joinTestAndTrain () =
+    let trainUsers  = File.ReadLines("../../../result/dataset_train.csv")
+    let evaluateUsers  = File.ReadLines("../../../result/dataset_evaluate.csv")
+    use fs = File.OpenWrite("../../../result/dataset_full.csv")
+    use sr = new StreamWriter(fs)
+
+    for line in trainUsers do
+        sr.WriteLine(line)
+
+    for line in evaluateUsers do
+        if (line.StartsWith("label") |> not)
+        then sr.WriteLine(line)
+
 let evaluateResults (model: PredictionModel<Input, Output>) (evaluatePath: string) =
     let testData = TextLoader(evaluatePath).CreateFrom(true, ',',false, true, false)
     //let regressionEvaluator = new RegressionEvaluator()
@@ -277,13 +299,14 @@ let main argv =
     // extractTestUsers "../../../data/test_users_data.tsv"
 
 
-    //let pipeline = LearningPipeline();
-    //pipeline.Add(TextLoader("../../../result/dataset_train.csv").CreateFrom(true, ',',false, true, false))
-    //pipeline.Add(new FieldAwareFactorizationMachineBinaryClassifier ())
-    //let model = pipeline.Train<Input, Output>()
-    //evaluateResults model "../../../result/dataset_evaluate.csv"
+    let pipeline = LearningPipeline();
+    pipeline.Add(TextLoader("../../../result/dataset_train.csv").CreateFrom(true, ',',false, true, false))
+    pipeline.Add(LightGbmBinaryClassifier ( NumLeaves = Nullable(18), MinDataPerLeaf = Nullable(80),
+        NormalizeFeatures = NormalizeOption.Yes, LearningRate = Nullable(0.1), UseCat = Nullable(true), CatSmooth = 20.0))
+    let model = pipeline.Train<Input, Output>()
+    evaluateResults model "../../../result/dataset_evaluate.csv"
 
-    //model.WriteAsync("../../../result/model.zip").Wait()
+    model.WriteAsync("../../../result/model.zip").Wait()
 
     let model = PredictionModel.ReadAsync<Input, Output>("../../../result/model.zip").Result
 
