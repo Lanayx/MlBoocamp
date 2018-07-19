@@ -217,7 +217,7 @@ let writePrediction (model: PredictionModel<Input, Output>) id (userValues: Dict
     input.Label <- label
     input.Features <- userValues.Values |> Seq.toArray
     let output = model.Predict(input)
-    sr.WriteLine(id + "," + output.Score.ToString(CultureInfo.InvariantCulture) + "," + output.Label.ToString() + "," + output.Probability.ToString())
+    sr.WriteLine(id + "," + output.Score.ToString(CultureInfo.InvariantCulture) + "," + output.Label.ToString() + "," + output.Probability.ToString(CultureInfo.InvariantCulture))
 
 let extractResults() =
     let list = ResizeArray<string>()
