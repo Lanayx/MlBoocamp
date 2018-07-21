@@ -299,21 +299,20 @@ let main argv =
     //    true
 
     // extractTestUsers "../../../data/test_users_data.tsv"
-
+    //let model = pipeline.Train<Input, Output>()
+    //evaluateResults model "../../../result/dataset_evaluate.csv"
+    //model.WriteAsync("../../../result/model.zip").Wait()
     let sw = Stopwatch()
     sw.Start()
     let pipeline = LearningPipeline();
     pipeline.Add(TextLoader("../../../result/dataset_full.csv").CreateFrom(true, ',',false, true, false))
-
     pipeline.Add(ColumnSelector(Column = [| "Label"; "Features" |]))
-
     pipeline.Add(
       LightGbmBinaryClassifier (
         NumLeaves = Nullable(20), MinDataPerLeaf = Nullable(80),
         LearningRate = Nullable(0.1), 
-        UseCat = Nullable(true), CatSmooth = 20.0))
-    //let model = pipeline.Train<Input, Output>()
-    //evaluateResults model "../../../result/dataset_evaluate.csv"
+        UseCat = Nullable(true), CatSmooth = 20.0, Booster = GossBoosterParameterFunction()))
+
 
     let cv = CrossValidator()
     cv.NumFolds <- 4
@@ -325,23 +324,21 @@ let main argv =
         |> Seq.maxBy (fun (model, metric) -> metric.Auc)
 
     Console.WriteLine("Best Auc: {0} Elapsed: {1}", bestMetric.Auc, sw.ElapsedMilliseconds)
-    bestModel.WriteAsync("../../../result/model.zip").Wait()
+    bestModel.WriteAsync("../../../result/model.zip").Wait()   
 
-    //model.WriteAsync("../../../result/model.zip").Wait()
+    let model = PredictionModel.ReadAsync<Input, Output>("../../../result/model.zip").Result
 
-    //let model = PredictionModel.ReadAsync<Input, Output>("../../../result/model.zip").Result
-
-    //fillDataSet
-    //    (getInputs())
-    //    "../../../result/headers(2-20).csv"
-    //    "../../../data/test_users_data.tsv"
-    //    "../../../result/tempResults.csv"
-    //    (writePrediction model)
-    //    false
+    fillDataSet
+        (getInputs())
+        "../../../result/headers(2-20).csv"
+        "../../../data/test_users_data.tsv"
+        "../../../result/tempResults.csv"
+        (writePrediction model)
+        false
 
     // "ffffc1b3d1732f1a923f2ef07430358e" is missing
 
-    //extractResults()
+    extractResults()
 
     //joinTestAndTrain ()
 
