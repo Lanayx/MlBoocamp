@@ -11,6 +11,7 @@ open Microsoft.ML.Runtime.Api;
 open System.Globalization
 open Microsoft.ML.Models
 open Microsoft.ML.Transforms
+open Microsoft.ML.Runtime
 
 let getMetric metric =
     let obj = JsonConvert.DeserializeObject<Dictionary<string, int>>(metric)
@@ -301,26 +302,31 @@ let main argv =
 
     let pipeline = LearningPipeline();
     pipeline.Add(TextLoader("../../../result/dataset_train.csv").CreateFrom(true, ',',false, true, false))
-    pipeline.Add(LightGbmBinaryClassifier ( NumLeaves = Nullable(18), MinDataPerLeaf = Nullable(80),
-        NormalizeFeatures = NormalizeOption.Yes, LearningRate = Nullable(0.1), UseCat = Nullable(true), CatSmooth = 20.0))
+    pipeline.Add(
+      LightGbmBinaryClassifier (
+        NumLeaves = Nullable(20), MinDataPerLeaf = Nullable(80),
+        LearningRate = Nullable(0.1), 
+        UseCat = Nullable(true), CatSmooth = 20.0))
     let model = pipeline.Train<Input, Output>()
     evaluateResults model "../../../result/dataset_evaluate.csv"
 
-    model.WriteAsync("../../../result/model.zip").Wait()
+    //model.WriteAsync("../../../result/model.zip").Wait()
 
-    let model = PredictionModel.ReadAsync<Input, Output>("../../../result/model.zip").Result
+    //let model = PredictionModel.ReadAsync<Input, Output>("../../../result/model.zip").Result
 
-    fillDataSet
-        (getInputs())
-        "../../../result/headers(2-20).csv"
-        "../../../data/test_users_data.tsv"
-        "../../../result/tempResults.csv"
-        (writePrediction model)
-        false
+    //fillDataSet
+    //    (getInputs())
+    //    "../../../result/headers(2-20).csv"
+    //    "../../../data/test_users_data.tsv"
+    //    "../../../result/tempResults.csv"
+    //    (writePrediction model)
+    //    false
 
     // "ffffc1b3d1732f1a923f2ef07430358e" is missing
 
-    extractResults()
+    //extractResults()
+
+    //joinTestAndTrain ()
 
     printfn "Hello World from F#!"
     0 // return an integer exit code
