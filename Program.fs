@@ -12,6 +12,7 @@ open System.Globalization
 open Microsoft.ML.Models
 open Microsoft.ML.Transforms
 open Microsoft.ML.Runtime
+open System.Diagnostics
 
 let getMetric metric =
     let obj = JsonConvert.DeserializeObject<Dictionary<string, int>>(metric)
@@ -299,16 +300,32 @@ let main argv =
 
     // extractTestUsers "../../../data/test_users_data.tsv"
 
-
+    let sw = Stopwatch()
+    sw.Start()
     let pipeline = LearningPipeline();
-    pipeline.Add(TextLoader("../../../result/dataset_train.csv").CreateFrom(true, ',',false, true, false))
+    pipeline.Add(TextLoader("../../../result/dataset_full.csv").CreateFrom(true, ',',false, true, false))
+
+    pipeline.Add(ColumnSelector(Column = [| "Label"; "Features" |]))
+
     pipeline.Add(
       LightGbmBinaryClassifier (
         NumLeaves = Nullable(20), MinDataPerLeaf = Nullable(80),
         LearningRate = Nullable(0.1), 
         UseCat = Nullable(true), CatSmooth = 20.0))
-    let model = pipeline.Train<Input, Output>()
-    evaluateResults model "../../../result/dataset_evaluate.csv"
+    //let model = pipeline.Train<Input, Output>()
+    //evaluateResults model "../../../result/dataset_evaluate.csv"
+
+    let cv = CrossValidator()
+    cv.NumFolds <- 4
+    let results = cv.CrossValidate<Input, Output>(pipeline)    
+    let (bestModel, bestMetric) = 
+        results.BinaryClassificationMetrics
+        |> Seq.skip 2
+        |> Seq.zip results.PredictorModels
+        |> Seq.maxBy (fun (model, metric) -> metric.Auc)
+
+    Console.WriteLine("Best Auc: {0} Elapsed: {1}", bestMetric.Auc, sw.ElapsedMilliseconds)
+    bestModel.WriteAsync("../../../result/model.zip").Wait()
 
     //model.WriteAsync("../../../result/model.zip").Wait()
 
