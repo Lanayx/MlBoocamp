@@ -18,14 +18,14 @@ let getMetric metric =
     let obj = JsonConvert.DeserializeObject<Dictionary<string, int>>(metric)
     obj
 
-let appendDictionary (main: Dictionary<string, int list>) (adding: Dictionary<string, int>) prefix =
+let appendDictionary (main: Dictionary<string, (int*int) list>) days (adding: Dictionary<string, int>) prefix =
     for elem in adding do
         let key = prefix + elem.Key
         if (main.ContainsKey key)
         then
-            main.[key] <- elem.Value :: main.[key]
+            main.[key] <- (elem.Value, days) :: main.[key]
         else
-            main.[key] <- [ elem.Value ]
+            main.[key] <- [ (elem.Value, days) ]
 
 let extractMetrics (metric: Dictionary<string, int>) =
     metric.Keys
@@ -86,14 +86,14 @@ let getUsers path =
         dict.[values.[0]] <- values.[1] |> int
     dict
 
-let median intList = 
+let median intList =
     let sorted = intList |> List.toArray |> Array.sort
-    let m1,m2 = 
+    let m1,m2 =
         let len = sorted.Length-1 |> float
-        len/2. |> floor |> int, len/2. |> ceil |> int 
+        len/2. |> floor |> int, len/2. |> ceil |> int
     (sorted.[m1] + sorted.[m2] |> single) /2.0f
 
-let mean intList = 
+let mean intList =
     intList |> List.map single |> List.average
 
 let fillDataSet (dict: Dictionary<string, int>) headersPath dataPath srPath f writeHeaders =
@@ -111,7 +111,7 @@ let fillDataSet (dict: Dictionary<string, int>) headersPath dataPath srPath f wr
         sr.WriteLine(headersString)
 
     let userValues = Dictionary<string, single>(StringComparer.InvariantCultureIgnoreCase)
-    let userValuesCounter = Dictionary<string, int list>()
+    let userValuesCounter = Dictionary<string, (int*int) list>()
     headers |> Seq.iter (fun elem -> userValues.Add(elem, 0.0f))
 
     let mutable currentId = ""
@@ -127,7 +127,12 @@ let fillDataSet (dict: Dictionary<string, int>) headersPath dataPath srPath f wr
                     let l = kv.Value
                     if userValues.ContainsKey(kv.Key)
                     then
-                        userValues.[kv.Key] <- mean l
+                        userValues.[kv.Key] <-
+                            l
+                            |> List.minBy (fun (value, days) -> days)
+                            |> fst
+                            |> single
+
 
                 f currentId userValues sr
                 counter <- counter + 1
@@ -137,18 +142,19 @@ let fillDataSet (dict: Dictionary<string, int>) headersPath dataPath srPath f wr
                 userValuesCounter.Clear()
                 headers |> Seq.iter (fun elem -> userValues.Add(elem, 0.0f))
 
+            let daysToValue = days |> int
             currentId <- id
             let storeValues metric prefix =
-                appendDictionary userValuesCounter (metric |> getMetric) prefix
+                appendDictionary userValuesCounter daysToValue (metric |> getMetric) prefix
 
             storeValues metric1 "x"
             storeValues metric2 "y"
             storeValues metric3 "z"
             if userValuesCounter.ContainsKey("days")
             then
-                userValuesCounter.["days"] <- (days |> int) :: userValuesCounter.["days"]
+                userValuesCounter.["days"] <- (daysToValue,daysToValue) :: userValuesCounter.["days"]
             else
-                userValuesCounter.["days"] <- [ days |> int ]
+                userValuesCounter.["days"] <- [ (daysToValue,daysToValue) ]
             userValues.["cat" + category.ToString()] <- 1.0f
             userValues.["label"] <- dict.[id] |> single
     f currentId userValues sr
@@ -310,35 +316,35 @@ let main argv =
     pipeline.Add(
       LightGbmBinaryClassifier (
         NumLeaves = Nullable(20), MinDataPerLeaf = Nullable(80),
-        LearningRate = Nullable(0.1), 
+        LearningRate = Nullable(0.1),
         UseCat = Nullable(true), CatSmooth = 20.0, Booster = GossBoosterParameterFunction()))
 
 
     let cv = CrossValidator()
     cv.NumFolds <- 4
-    let results = cv.CrossValidate<Input, Output>(pipeline)    
-    let (bestModel, bestMetric) = 
+    let results = cv.CrossValidate<Input, Output>(pipeline)
+    let (bestModel, bestMetric) =
         results.BinaryClassificationMetrics
         |> Seq.skip 2
         |> Seq.zip results.PredictorModels
         |> Seq.maxBy (fun (model, metric) -> metric.Auc)
 
     Console.WriteLine("Best Auc: {0} Elapsed: {1}", bestMetric.Auc, sw.ElapsedMilliseconds)
-    bestModel.WriteAsync("../../../result/model.zip").Wait()   
+    //bestModel.WriteAsync("../../../result/model.zip").Wait()
 
-    let model = PredictionModel.ReadAsync<Input, Output>("../../../result/model.zip").Result
+    //let model = PredictionModel.ReadAsync<Input, Output>("../../../result/model.zip").Result
 
-    fillDataSet
-        (getInputs())
-        "../../../result/headers(2-20).csv"
-        "../../../data/test_users_data.tsv"
-        "../../../result/tempResults.csv"
-        (writePrediction model)
-        false
+    //fillDataSet
+    //    (getInputs())
+    //    "../../../result/headers(2-20).csv"
+    //    "../../../data/test_users_data.tsv"
+    //    "../../../result/tempResults.csv"
+    //    (writePrediction model)
+    //    false
 
     // "ffffc1b3d1732f1a923f2ef07430358e" is missing
 
-    extractResults()
+    //extractResults()
 
     //joinTestAndTrain ()
 
